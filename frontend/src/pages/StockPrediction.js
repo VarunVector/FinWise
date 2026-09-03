@@ -12,25 +12,31 @@ export default function StockPrediction() {
     const [error, setError] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedStock, setSelectedStock] = useState(null);
+    const [dataSource, setDataSource] = useState("live");
 
     useEffect(() => {
         const fetchPredictions = async () => {
             try {
                 // Try real backend first, fall back to mock API
                 let data = null;
+                let source = "demo";
                 try {
                     const res = await fetch("http://localhost:5000/api/stocks/predictions");
                     const json = await res.json();
                     if (!res.ok) throw new Error(json.message || "Failed to fetch predictions");
                     data = json.data;
+                    source = "live";
                 } catch (err) {
                     // Backend unavailable - use mock data
+                    console.warn("Live backend unavailable, falling back to demo data:", err);
                     const mockRes = await stockPredictionAPI.getPredictions();
                     data = mockRes.data;
+                    source = "demo";
                 }
 
                 // Set data and default selection
                 setStocks(data || []);
+                setDataSource(source);
                 if (data && data.length > 0) {
                     setSelectedStock(data[0]);
                 }
@@ -86,6 +92,19 @@ export default function StockPrediction() {
                 <div>
                     <h1 className="sp-title">LSTM Market Prediction</h1>
                     <p className="sp-subtitle">Live AI Forecasting for NIFTY 50</p>
+                    <div className="sp-datasource-row">
+                        <span className={`sp-datasource-badge ${dataSource === 'live' ? 'live' : 'demo'}`}>
+                            {dataSource === 'live' ? (
+                                <>
+                                    <span className="sp-pulse-dot"></span> Live LSTM Data
+                                </>
+                            ) : (
+                                <>
+                                    <AlertCircle size={14} /> Demo Data
+                                </>
+                            )}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="sp-search-wrap">

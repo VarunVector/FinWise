@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { FiUser, FiMail, FiLock, FiPhone, FiEye, FiEyeOff, FiArrowLeft, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
+import ClerkOtpRegister from '../components/ClerkOtpRegister';
+import { FiUser, FiMail, FiLock, FiPhone, FiEye, FiEyeOff, FiArrowLeft, FiAlertCircle, FiCheckCircle, FiShield } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook } from 'react-icons/fa';
 
+// Detect if a real Clerk publishable key is configured.
+const isClerkConfigured = () => {
+  const key = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+  return !!key && !key.includes('YOUR_CLERK');
+};
+
 const Register = () => {
   const navigate = useNavigate();
-  const { register, sendRegistrationOtp, verifyRegistrationOtp, error, clearError } = useAuth();
+  const { sendRegistrationOtp, verifyRegistrationOtp, error, clearError } = useAuth();
   const [step, setStep] = useState(1); // 1: Form, 2: OTP Verification
   const [formData, setFormData] = useState({
     name: '',
@@ -23,8 +30,9 @@ const Register = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [registerError, setRegisterError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState({ score: 0, label: '', color: '' });
+  const [mode, setMode] = useState('standard'); // 'standard' or 'clerk'
 
-// OTP state
+  // OTP state
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [resendTimer, setResendTimer] = useState(0);
   const [otpDemo, setOtpDemo] = useState(''); // For demo display
@@ -85,7 +93,7 @@ const Register = () => {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     const newValue = type === 'checkbox' ? checked : value;
-    
+
     setFormData(prev => ({
       ...prev,
       [name]: newValue
@@ -510,6 +518,28 @@ const Register = () => {
           <p>{step === 1 ? 'Create your account to get started' : 'Verify your email address'}</p>
         </div>
 
+        {/* Mode Toggle Tabs */}
+        {step === 1 && (
+          <div className="d-flex mb-4" style={{ background: '#f0f2f5', borderRadius: '12px', padding: '4px' }}>
+            <button
+              className={`btn flex-fill ${mode === 'standard' ? 'btn-primary' : 'btn-light'}`}
+              onClick={() => { setMode('standard'); setRegisterError(''); setStep(1); }}
+              style={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem' }}
+            >
+              <FiUser className="me-1" /> Standard
+            </button>
+            {isClerkConfigured() && (
+              <button
+                className={`btn flex-fill ${mode === 'clerk' ? 'btn-primary' : 'btn-light'}`}
+                onClick={() => { setMode('clerk'); setRegisterError(''); setStep(1); navigate('/sign-up'); }}
+                style={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem' }}
+              >
+                <FiShield className="me-1" /> Clerk OTP
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Alert Messages */}
         {(registerError || error) && (
           <div className="alert alert-danger d-flex align-items-center gap-2 py-2 px-3" role="alert" style={{ borderRadius: '8px', fontSize: '0.9rem' }}>
@@ -518,10 +548,11 @@ const Register = () => {
           </div>
         )}
 
-        {step === 1 && renderRegisterForm()}
-        {step === 2 && renderOtpVerification()}
+        {mode === 'standard' && step === 1 && renderRegisterForm()}
+        {mode === 'standard' && step === 2 && renderOtpVerification()}
+        {mode === 'clerk' && isClerkConfigured() && <ClerkOtpRegister />}
 
-        {step === 1 && (
+        {step === 1 && mode === 'standard' && (
           <>
             <div className="auth-divider">or continue with</div>
             <div className="d-flex gap-2 mb-3">

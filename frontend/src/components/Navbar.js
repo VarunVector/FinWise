@@ -1,13 +1,23 @@
 import React from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ClerkSignOutButton from './ClerkSignOutButton';
 import { FiGrid, FiMessageSquare, FiLogOut, FiUser, FiBell, FiCpu } from 'react-icons/fi';
+
+// Detects whether a real Clerk publishable key is configured.
+// When true, the app is wrapped in <ClerkProvider> and Clerk hooks are available.
+const isClerkConfigured = () => {
+  const key = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+  return !!key && !key.includes('YOUR_CLERK');
+};
 
 const Navbar = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const clerkEnabled = isClerkConfigured();
 
   const handleLogout = () => {
+    // Clear the mock/local auth state
     logout();
     navigate('/');
   };
@@ -101,15 +111,19 @@ const Navbar = () => {
                     <FiUser className="me-2" /> Profile
                   </button>
                 </li>
-                <li><hr className="dropdown-divider" /></li>
+<li><hr className="dropdown-divider" /></li>
                 <li>
-                  <button
-                    className="dropdown-item text-danger"
-                    onClick={handleLogout}
-                    style={{ borderRadius: '8px', padding: '8px 16px' }}
-                  >
-                    <FiLogOut className="me-2" /> Logout
-                  </button>
+                  {clerkEnabled ? (
+                    <ClerkSignOutButton onSignOut={handleLogout} />
+                  ) : (
+                    <button
+                      className="dropdown-item text-danger"
+                      onClick={handleLogout}
+                      style={{ borderRadius: '8px', padding: '8px 16px' }}
+                    >
+                      <FiLogOut className="me-2" /> Logout
+                    </button>
+                  )}
                 </li>
               </ul>
             </div>

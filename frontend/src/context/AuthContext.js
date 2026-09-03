@@ -1,7 +1,51 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
 import { authAPI } from '../services/api';
 
 const AuthContext = createContext(null);
+
+// Detect if a real Clerk publishable key is configured.
+// When true, the app is wrapped in <ClerkProvider> and Clerk hooks are usable.
+const isClerkConfigured = () => {
+  const key = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+  return !!key && !key.includes('YOUR_CLERK');
+};
+
+/**
+ * Bridge that syncs a Clerk session into the mock AuthContext.
+ * This component is only rendered when isClerkConfigured() returns true,
+ * which guarantees a <ClerkProvider> is present in the tree, so the
+ * Clerk hooks are safe to call.
+ */
+const ClerkSessionBridge = ({ onSync }) => {
+  const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
+  const { isSignedIn } = useClerkAuth();
+
+  useEffect(() => {
+    if (clerkLoaded) {
+      // Read the Clerk user's onboarding status from localStorage (defaults to
+      // false for new users so they are routed to the questionnaire first).
+      const clerkOnboarded = clerkUser
+        ? localStorage.getItem(`finwise_clerk_onboarded_${clerkUser.id}`) === 'true'
+        : false;
+
+      onSync({
+        isSignedIn: !!isSignedIn,
+        user: clerkUser
+          ? {
+            id: clerkUser.id,
+            name: clerkUser.fullName || clerkUser.firstName || 'User',
+            email: clerkUser.primaryEmailAddress?.emailAddress || '',
+            isOnboarded: clerkOnboarded,
+            isClerk: true,
+          }
+          : null,
+      });
+    }
+  }, [clerkLoaded, isSignedIn, clerkUser, onSync]);
+
+  return null;
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -21,7 +65,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const storedToken = localStorage.getItem('finwise_token');
     const storedUser = localStorage.getItem('finwise_user');
-    
+
     if (storedToken && storedUser) {
       try {
         setToken(storedToken);
@@ -40,15 +84,15 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await authAPI.login(email, password);
-      
+
       // Store token and user
       localStorage.setItem('finwise_token', response.token);
       localStorage.setItem('finwise_user', JSON.stringify(response.user));
-      
+
       setToken(response.token);
       setUser(response.user);
       setLoading(false);
-      
+
       return { success: true, user: response.user };
     } catch (err) {
       setError(err.message);
@@ -63,15 +107,15 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await authAPI.register(userData);
-      
+
       // Store token and user  
       localStorage.setItem('finwise_token', response.token);
       localStorage.setItem('finwise_user', JSON.stringify(response.user));
-      
+
       setToken(response.token);
       setUser(response.user);
       setLoading(false);
-      
+
       return { success: true, user: response.user };
     } catch (err) {
       setError(err.message);
@@ -113,7 +157,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Reset password
+// Reset password
   const resetPassword = useCallback(async (email, newPassword) => {
     setError(null);
     try {
@@ -128,15 +172,28 @@ export const AuthProvider = ({ children }) => {
   // Complete onboarding
   const completeOnboarding = useCallback(async (profileData) => {
     if (!user) return { success: false, error: 'Not authenticated' };
-    
+
     try {
-      const response = await authAPI.completeOnboarding(user.id, profileData);
-      
+      let updatedUser;
+
+      if (user.isClerk) {
+        // Clerk users aren't stored in the mock backend; persist onboarding locally.
+        localStorage.setItem(`finwise_clerk_onboarded_${user.id}`, 'true');
+        updatedUser = {
+          ...user,
+          isOnboarded: true,
+          profile: { ...(user.profile || {}), ...profileData },
+        };
+      } else {
+        const response = await authAPI.completeOnboarding(user.id, profileData);
+        updatedUser = response.user;
+      }
+
       // Update stored user
-      localStorage.setItem('finwise_user', JSON.stringify(response.user));
-      setUser(response.user);
-      
-      return { success: true, user: response.user };
+      localStorage.setItem('finwise_user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+
+      return { success: true, user: updatedUser };
     } catch (err) {
       setError(err.message);
       return { success: false, error: err.message };
@@ -167,14 +224,14 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await authAPI.verifyOtpLogin(email, otp);
-      
+
       localStorage.setItem('finwise_token', response.token);
       localStorage.setItem('finwise_user', JSON.stringify(response.user));
-      
+
       setToken(response.token);
       setUser(response.user);
       setLoading(false);
-      
+
       return { success: true, user: response.user };
     } catch (err) {
       setError(err.message);
@@ -201,14 +258,14 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await authAPI.verifyOtpRegistration(email, otp);
-      
+
       localStorage.setItem('finwise_token', response.token);
       localStorage.setItem('finwise_user', JSON.stringify(response.user));
-      
+
       setToken(response.token);
       setUser(response.user);
       setLoading(false);
-      
+
       return { success: true, user: response.user };
     } catch (err) {
       setError(err.message);
@@ -220,6 +277,28 @@ export const AuthProvider = ({ children }) => {
   // Clear error
   const clearError = useCallback(() => {
     setError(null);
+  }, []);
+
+  // Sync Clerk session into the mock auth state when Clerk is configured.
+  const handleClerkSync = useCallback(({ isSignedIn, user: clerkUser }) => {
+    setLoading(false);
+    if (isSignedIn && clerkUser) {
+      setUser(clerkUser);
+      setToken('clerk_session_' + (clerkUser.id || ''));
+    } else if (!isSignedIn) {
+      // Only clear Clerk-derived state; keep mock session if present
+      const storedToken = localStorage.getItem('finwise_token');
+      const storedUser = localStorage.getItem('finwise_user');
+      if (storedToken && storedUser) {
+        try {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+        } catch (e) {
+          setToken(null);
+          setUser(null);
+        }
+      }
+    }
   }, []);
 
   const value = {
@@ -246,6 +325,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={value}>
+      {isClerkConfigured() && <ClerkSessionBridge onSync={handleClerkSync} />}
       {children}
     </AuthContext.Provider>
   );

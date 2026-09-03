@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { FiMail, FiLock, FiEye, FiEyeOff, FiArrowLeft, FiAlertCircle, FiSmartphone } from 'react-icons/fi';
+import ClerkOtpLogin from '../components/ClerkOtpLogin';
+import { FiMail, FiLock, FiEye, FiEyeOff, FiArrowLeft, FiAlertCircle, FiSmartphone, FiShield } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook } from 'react-icons/fa';
+
+// Detect if a real Clerk publishable key is configured.
+const isClerkConfigured = () => {
+  const key = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+  return !!key && !key.includes('YOUR_CLERK');
+};
 
 const Login = () => {
   const navigate = useNavigate();
@@ -95,8 +102,8 @@ const Login = () => {
     setLoading(true);
     setLoginError('');
 
-try {
-const result = await sendLoginOtp(otpEmail);
+    try {
+      const result = await sendLoginOtp(otpEmail);
       if (result.success) {
         setOtpSent(true);
         setLoginError('');
@@ -189,6 +196,15 @@ const result = await sendLoginOtp(otpEmail);
     setAuthMode('otp');
     setLoginError('');
     setValidationErrors({});
+  };
+
+  const switchToClerk = () => {
+    setAuthMode('clerk');
+    setLoginError('');
+    setValidationErrors({});
+    setOtpSent(false);
+    setOtp(['', '', '', '', '', '']);
+    navigate('/sign-in');
   };
 
   const renderPasswordLogin = () => (
@@ -439,6 +455,15 @@ const result = await sendLoginOtp(otpEmail);
           >
             <FiSmartphone className="me-1" /> OTP Login
           </button>
+          {isClerkConfigured() && (
+            <button
+              className={`btn flex-fill ${authMode === 'clerk' ? 'btn-primary' : 'btn-light'}`}
+              onClick={switchToClerk}
+              style={{ borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem' }}
+            >
+              <FiShield className="me-1" /> Clerk OTP
+            </button>
+          )}
         </div>
 
         {/* Alert Messages */}
@@ -449,7 +474,9 @@ const result = await sendLoginOtp(otpEmail);
           </div>
         )}
 
-        {authMode === 'password' ? renderPasswordLogin() : renderOtpLogin()}
+        {authMode === 'password' && renderPasswordLogin()}
+        {authMode === 'otp' && renderOtpLogin()}
+        {authMode === 'clerk' && isClerkConfigured() && <ClerkOtpLogin />}
 
         {/* Social Login */}
         <div className="auth-divider">or continue with</div>

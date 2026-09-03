@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import OnboardingWizard from './components/OnboardingWizard';
+import ClerkOtpRegister from './components/ClerkOtpRegister';
+import ClerkOtpLogin from './components/ClerkOtpLogin';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -33,7 +35,12 @@ function AppRoutes() {
           {/* Public routes */}
           <Route path="/" element={!isAuthenticated ? <Landing /> : <Navigate to={isOnboarded ? '/dashboard' : '/onboarding'} />} />
           <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to={isOnboarded ? '/dashboard' : '/onboarding'} />} />
+          {/* Dedicated route for Clerk's prebuilt SignIn component (handles CAPTCHA + OTP). */}
+          <Route path="/sign-in" element={!isAuthenticated ? <ClerkOtpLogin /> : <Navigate to={isOnboarded ? '/dashboard' : '/onboarding'} />} />
           <Route path="/register" element={!isAuthenticated ? <Register /> : <Navigate to={isOnboarded ? '/dashboard' : '/onboarding'} />} />
+          {/* Dedicated route for Clerk's prebuilt SignUp component (handles CAPTCHA + OTP)
+              so the Clerk user is reliably created and persistable. */}
+          <Route path="/sign-up" element={!isAuthenticated ? <ClerkOtpRegister /> : <Navigate to={isOnboarded ? '/dashboard' : '/onboarding'} />} />
           <Route path="/forgot-password" element={!isAuthenticated ? <ForgotPassword /> : <Navigate to={isOnboarded ? '/dashboard' : '/onboarding'} />} />
 
           {/* Protected routes */}
