@@ -8,4 +8,5 @@ tensorflow
 vaderSentiment
 newsapi-python
 python-dotenv
-
+pymongo
+dnspython

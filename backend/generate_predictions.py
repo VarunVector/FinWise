@@ -209,31 +209,68 @@ def train_stock(stock):
         print(f"Error processing {stock}: {e}")
         return None
 
+def save_or_update_predictions(new_results, output_path):
+    """
+    Safely merges new predictions into predictions.json and saves them.
+    Prevents overwriting existing predictions with an empty list if rate-limited.
+    """
+    if not new_results:
+        print("⚠️ No new results generated. Preserving existing predictions.json file.")
+        return
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    existing_data = []
+
+    if os.path.exists(output_path):
+        try:
+            with open(output_path, 'r', encoding='utf-8') as f:
+                existing_data = json.load(f)
+        except Exception as e:
+            print(f"Notice: Could not load existing predictions: {e}")
+
+    # Create a map by symbol
+    data_map = {item['symbol']: item for item in existing_data if isinstance(item, dict) and 'symbol' in item}
+
+    # Update with new results
+    for res in new_results:
+        data_map[res['symbol']] = res
+
+    # Convert back to list and sort by expected_return
+    updated_list = list(data_map.values())
+    updated_list.sort(key=lambda x: x.get('expected_return', 0), reverse=True)
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(updated_list, f, indent=4, ensure_ascii=False)
+
+    print(f"\n✅ Predictions successfully updated & saved ({len(updated_list)} total stocks) to: {output_path}")
+    for r in updated_list[:5]:
+        print(f"  • {r.get('symbol')} | Return: {r.get('expected_return')}% | Acc: {r.get('confidence')}%")
+
 if __name__ == "__main__":
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(SCRIPT_DIR, 'data', 'predictions.json')
+    
     results = []
     target_stocks = stocks
     
-    print(f"Starting parallel training for {len(target_stocks)} stocks with News Sentiment...")
+    print(f"Starting sequential/parallel training for {len(target_stocks)} stocks...")
+    print(f"Target predictions file path: {output_path}")
     
-    # Reduced max_workers to 1 to avoid Yahoo Finance rate limiting
+    # Process with max_workers=1 to mitigate Yahoo Finance rate limiting
     with ProcessPoolExecutor(max_workers=1) as executor:
-        futures = [executor.submit(train_stock, stock) for stock in target_stocks]
+        futures = {executor.submit(train_stock, stock): stock for stock in target_stocks}
 
         for future in as_completed(futures):
             res = future.result()
             if res is not None:
                 results.append(res)
-    
-    # Sort by expected return as per user's logic
-    results.sort(key=lambda x: x['expected_return'], reverse=True)
-    
-    os.makedirs('data', exist_ok=True)
-    output_path = 'data/predictions.json'
-    
-    with open(output_path, 'w') as f:
-        json.dump(results, f, indent=4)
-        
-    print(f"\n✅ All done! Top picks saved to {output_path}")
-    for r in results[:5]:
-        print(f"{r['symbol']} | Return: {r['expected_return']}% | Acc: {r['confidence']}%")
+                # Incrementally update JSON file so progress is not lost if rate-limited
+                save_or_update_predictions([res], output_path)
+
+    # Final overall save & summary
+    if results:
+        save_or_update_predictions(results, output_path)
+    else:
+        print("⚠️ No new stocks processed in this run. Existing predictions.json remains intact.")
+
 

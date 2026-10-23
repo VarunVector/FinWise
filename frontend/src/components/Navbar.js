@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ClerkSignOutButton from './ClerkSignOutButton';
-import { FiGrid, FiMessageSquare, FiLogOut, FiUser, FiBell, FiCpu } from 'react-icons/fi';
+import { FiGrid, FiMessageSquare, FiLogOut, FiUser, FiBell, FiCpu, FiShield } from 'react-icons/fi';
 
 // Detects whether a real Clerk publishable key is configured.
 // When true, the app is wrapped in <ClerkProvider> and Clerk hooks are available.
@@ -111,7 +111,7 @@ const Navbar = () => {
                     <FiUser className="me-2" /> Profile
                   </button>
                 </li>
-<li><hr className="dropdown-divider" /></li>
+                <li><hr className="dropdown-divider" /></li>
                 <li>
                   {clerkEnabled ? (
                     <ClerkSignOutButton onSignOut={handleLogout} />

@@ -69,7 +69,14 @@ export const AuthProvider = ({ children }) => {
     if (storedToken && storedUser) {
       try {
         setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        const parsedUser = JSON.parse(storedUser);
+        if (!parsedUser.profile || Object.keys(parsedUser.profile).length === 0) {
+          const rawProfile = localStorage.getItem(`finwise_user_profile_${parsedUser.id}`) ||
+            localStorage.getItem(`finwise_user_profile_${parsedUser.email}`) ||
+            localStorage.getItem('finwise_user_profile');
+          if (rawProfile) parsedUser.profile = JSON.parse(rawProfile);
+        }
+        setUser(parsedUser);
       } catch (e) {
         localStorage.removeItem('finwise_token');
         localStorage.removeItem('finwise_user');
@@ -157,7 +164,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-// Reset password
+  // Reset password
   const resetPassword = useCallback(async (email, newPassword) => {
     setError(null);
     try {
@@ -189,6 +196,13 @@ export const AuthProvider = ({ children }) => {
         updatedUser = response.user;
       }
 
+      // Explicitly persist profile to dedicated localStorage keys
+      if (updatedUser.profile) {
+        localStorage.setItem('finwise_user_profile', JSON.stringify(updatedUser.profile));
+        if (updatedUser.id) localStorage.setItem(`finwise_user_profile_${updatedUser.id}`, JSON.stringify(updatedUser.profile));
+        if (updatedUser.email) localStorage.setItem(`finwise_user_profile_${updatedUser.email}`, JSON.stringify(updatedUser.profile));
+      }
+
       // Update stored user
       localStorage.setItem('finwise_user', JSON.stringify(updatedUser));
       setUser(updatedUser);
@@ -202,6 +216,11 @@ export const AuthProvider = ({ children }) => {
 
   // Update user profile locally (for demo)
   const updateUser = useCallback((updatedUser) => {
+    if (updatedUser.profile) {
+      localStorage.setItem('finwise_user_profile', JSON.stringify(updatedUser.profile));
+      if (updatedUser.id) localStorage.setItem(`finwise_user_profile_${updatedUser.id}`, JSON.stringify(updatedUser.profile));
+      if (updatedUser.email) localStorage.setItem(`finwise_user_profile_${updatedUser.email}`, JSON.stringify(updatedUser.profile));
+    }
     localStorage.setItem('finwise_user', JSON.stringify(updatedUser));
     setUser(updatedUser);
   }, []);
@@ -283,7 +302,22 @@ export const AuthProvider = ({ children }) => {
   const handleClerkSync = useCallback(({ isSignedIn, user: clerkUser }) => {
     setLoading(false);
     if (isSignedIn && clerkUser) {
-      setUser(clerkUser);
+      let storedProfile = null;
+      try {
+        const rawProfile = localStorage.getItem(`finwise_user_profile_${clerkUser.id}`) ||
+          localStorage.getItem(`finwise_user_profile_${clerkUser.primaryEmailAddress?.emailAddress}`) ||
+          localStorage.getItem('finwise_user_profile');
+        if (rawProfile) storedProfile = JSON.parse(rawProfile);
+      } catch (e) {
+        console.warn('Failed to parse stored user profile during Clerk sync', e);
+      }
+
+      const fullUser = {
+        ...clerkUser,
+        profile: storedProfile || clerkUser.profile || {}
+      };
+
+      setUser(fullUser);
       setToken('clerk_session_' + (clerkUser.id || ''));
     } else if (!isSignedIn) {
       // Only clear Clerk-derived state; keep mock session if present
@@ -292,7 +326,14 @@ export const AuthProvider = ({ children }) => {
       if (storedToken && storedUser) {
         try {
           setToken(storedToken);
-          setUser(JSON.parse(storedUser));
+          const parsedUser = JSON.parse(storedUser);
+          if (!parsedUser.profile || Object.keys(parsedUser.profile).length === 0) {
+            const rawProfile = localStorage.getItem(`finwise_user_profile_${parsedUser.id}`) ||
+              localStorage.getItem(`finwise_user_profile_${parsedUser.email}`) ||
+              localStorage.getItem('finwise_user_profile');
+            if (rawProfile) parsedUser.profile = JSON.parse(rawProfile);
+          }
+          setUser(parsedUser);
         } catch (e) {
           setToken(null);
           setUser(null);

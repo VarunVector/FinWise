@@ -146,6 +146,30 @@ const OnboardingWizard = () => {
     }
   };
 
+  const mapOnboardingToRiskModelInput = (data) => {
+    const efMap = { 'No': 1, 'Less than 3 months': 2, '3–6 months': 5, 'More than 6 months': 8 };
+    const ilrMap = { 'Less than 1 month': 1, '1–3 months': 2, '3–6 months': 3, 'More than 6 months': 4 };
+    const expMap = { 'Never': 1, 'Gold': 1, 'Mutual Funds': 2, 'Stocks': 3, 'Multiple Assets': 3 };
+    const ikMap = { 'Beginner': 2, 'Intermediate': 4, 'Advanced': 6 };
+    const msrMap = { 'Less than 10%': 2, '10–20%': 4, '20–40%': 6, 'Above 40%': 8 };
+    const occMap = { 'Student': 1, 'Salaried': 3, 'Self-Employed': 2, 'Business Owner': 3, 'Retired': 2, 'Other': 2 };
+    const loanMap = { 'No': 1, 'Yes, manageable': 3, 'Yes, high burden': 6 };
+
+    return {
+      emergencySavings: efMap[data.emergencyFund] || 4,
+      emergencyConfidence: ilrMap[data.incomeLossRunway] || 3,
+      stocksBonds: expMap[data.investmentExperience] || 2,
+      investmentChoice: ikMap[data.investmentKnowledge] || 4,
+      financialKnowledge: ikMap[data.investmentKnowledge] || 4,
+      householdIncome: msrMap[data.monthlySavingsRate] || 5,
+      incomeStability: occMap[data.occupation] || 3,
+      spendingVsIncome: 2,
+      tooMuchDebt: loanMap[data.loansStatus] || 3,
+      creditCardLateFee: data.loansStatus === 'Yes, high burden' ? 2 : 1,
+      medicalDebt: 1,
+    };
+  };
+
   const handleComplete = async () => {
     setLoading(true);
     try {
@@ -153,13 +177,68 @@ const OnboardingWizard = () => {
         ? [...formData.goals.filter(g => g !== 'other'), `other: ${formData.otherGoal}`]
         : formData.goals;
 
-      const result = await completeOnboarding({
+      // 🤖 Call Python ML Model API with mapped questionnaire inputs
+      let riskModelOutput = null;
+      try {
+        const modelPayload = mapOnboardingToRiskModelInput(formData);
+        const questionnaireAnswers = {
+          age: formData.age,
+          occupation: formData.occupation,
+          financialSituation: formData.financialSituation,
+          emergencyFund: formData.emergencyFund,
+          monthlySavingsRate: formData.monthlySavingsRate,
+          loansStatus: formData.loansStatus,
+          incomeLossRunway: formData.incomeLossRunway,
+          investmentExperience: formData.investmentExperience,
+          investmentKnowledge: formData.investmentKnowledge,
+          preInvestingHabit: formData.preInvestingHabit,
+          marketReaction: formData.marketReaction,
+          investmentHorizon: formData.investmentHorizon,
+          riskStatement: formData.riskStatement,
+          moneyUsageTimeline: formData.moneyUsageTimeline,
+          interestedAssets: formData.interestedAssets,
+          monthlyInvestmentAmount: formData.monthlyInvestmentAmount,
+          importantFactor: formData.importantFactor,
+          portfolioReviewFrequency: formData.portfolioReviewFrequency,
+          recommendationTypes: formData.recommendationTypes,
+          goals: goalsPayload,
+          monthlyIncome: formData.monthlyIncome,
+          monthlyExpenses: formData.monthlyExpenses,
+        };
+
+        const res = await fetch('http://localhost:5000/api/risk/assess', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userInfo: {
+              email: user?.email || 'demo@finwise.ai',
+              name: formData.name || user?.name || 'User',
+              user_id: user?.id || ''
+            },
+            questionnaire: questionnaireAnswers,
+            modelInput: modelPayload,
+            ...modelPayload
+          }),
+        });
+        const apiRes = await res.json();
+        if (apiRes.success) {
+          riskModelOutput = apiRes.data;
+          try {
+            localStorage.setItem('finwise_latest_risk', JSON.stringify(riskModelOutput));
+          } catch (e) { }
+        }
+      } catch (err) {
+        console.warn('[Onboarding] Could not connect to Python Flask API. Using fallback profile risk assessment.', err);
+      }
+
+      const profilePayload = {
         name: formData.name,
         goals: goalsPayload,
         otherGoal: formData.otherGoal,
         monthlyIncome: parseInt(formData.monthlyIncome) || 0,
         monthlyExpenses: parseInt(formData.monthlyExpenses) || 0,
-        riskProfile: formData.riskProfile,
+        riskProfile: riskModelOutput ? riskModelOutput.risk_tier.toLowerCase() : (formData.riskProfile || 'moderate'),
+        riskModelOutput: riskModelOutput,
         questionnaire: {
           age: formData.age,
           occupation: formData.occupation,
@@ -181,14 +260,22 @@ const OnboardingWizard = () => {
           portfolioReviewFrequency: formData.portfolioReviewFrequency,
           recommendationTypes: formData.recommendationTypes,
         },
-        // Set some demo data for the portfolio
+        // Set portfolio data aligned with ML model allocation
         totalInvestments: 250000,
         totalReturns: 37500,
         portfolioValue: 287500,
         sipAmount: 15000,
-        fdAmount: 100000,
-        equityAmount: 150000,
-      });
+        fdAmount: riskModelOutput ? (riskModelOutput.allocations.find(a => a.category.includes('Cash') || a.category.includes('Deposit'))?.percentage || 25) * 2875 : 100000,
+        equityAmount: riskModelOutput ? (riskModelOutput.allocations.find(a => a.category.includes('Equit'))?.percentage || 50) * 2875 : 150000,
+      };
+
+      try {
+        localStorage.setItem('finwise_user_profile', JSON.stringify(profilePayload));
+        if (user?.id) localStorage.setItem(`finwise_user_profile_${user.id}`, JSON.stringify(profilePayload));
+        if (user?.email) localStorage.setItem(`finwise_user_profile_${user.email}`, JSON.stringify(profilePayload));
+      } catch (e) { }
+
+      const result = await completeOnboarding(profilePayload);
 
       if (result.success) {
         navigate('/dashboard');
