@@ -207,6 +207,23 @@ const Login = () => {
     navigate('/sign-in');
   };
 
+    const handleDemoLogin = async () => {
+    setLoading(true);
+    setLoginError('');
+    try {
+      const result = await login('demo@finwise.ai', 'Demo@123');
+      if (result.success) {
+        navigate('/dashboard');
+      } else {
+        setLoginError(result.error || 'Demo login failed');
+      }
+    } catch (err) {
+      setLoginError('Demo login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderPasswordLogin = () => (
     <form onSubmit={handleSubmit} noValidate>
       <div className="mb-3">
@@ -294,6 +311,14 @@ const Login = () => {
         ) : (
           'Login'
         )}
+      </button>
+      <button
+        type="button"
+        className="btn btn-outline-success w-100 mb-3 d-flex align-items-center justify-content-center gap-2 fw-medium"
+        onClick={handleDemoLogin}
+        disabled={loading}
+      >
+        <span>⚡ 1-Click Demo Login (Explore App)</span>
       </button>
     </form>
   );

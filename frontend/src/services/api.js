@@ -15,7 +15,7 @@ const MOCK_USERS = [
     email: 'demo@finwise.ai',
     phone: '+91-9876543210',
     password: 'Demo@123',
-    isOnboarded: false,
+    isOnboarded: true,
     profile: {
       photo: null,
       goals: [],
